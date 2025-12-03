@@ -1,20 +1,19 @@
 import {
   JSONValue,
-  LanguageModelV2CallWarning,
-  LanguageModelV2FinishReason,
-  LanguageModelV2StreamPart,
-  LanguageModelV2Usage,
-  SharedV2ProviderMetadata,
+  SharedV3Warning,
+  LanguageModelV3FinishReason,
+  LanguageModelV3StreamPart,
+  LanguageModelV3Usage,
+  SharedV3ProviderMetadata,
 } from '@ai-sdk/provider';
 import {
   createIdGenerator,
+  DelayedPromise,
+  FlexibleSchema,
   ProviderOptions,
   type InferSchema,
-  type Schema,
 } from '@ai-sdk/provider-utils';
 import { ServerResponse } from 'http';
-import * as z3 from 'zod/v3';
-import * as z4 from 'zod/v4';
 import { logWarnings } from '../logger/log-warnings';
 import { resolveLanguageModel } from '../model/resolve-model';
 import { CallSettings } from '../prompt/call-settings';
@@ -47,7 +46,6 @@ import {
   createAsyncIterableStream,
 } from '../util/async-iterable-stream';
 import { createStitchableStream } from '../util/create-stitchable-stream';
-import { DelayedPromise } from '../util/delayed-promise';
 import { DownloadFunction } from '../util/download/download-function';
 import { now as originalNow } from '../util/now';
 import { prepareRetries } from '../util/prepare-retries';
@@ -167,12 +165,11 @@ functionality that can be fully encapsulated in the provider.
 
 @returns
 A result object for accessing the partial object stream and additional information.
+
+@deprecated Use `streamText` with an `output` setting instead.
  */
 export function streamObject<
-  SCHEMA extends
-    | z3.Schema
-    | z4.core.$ZodType
-    | Schema = z4.core.$ZodType<JSONValue>,
+  SCHEMA extends FlexibleSchema<unknown> = FlexibleSchema<JSONValue>,
   OUTPUT extends
     | 'object'
     | 'array'
@@ -486,10 +483,10 @@ class DefaultStreamObjectResult<PARTIAL, RESULT, ELEMENT_STREAM>
           'ai.prompt': {
             input: () => JSON.stringify({ system, prompt, messages }),
           },
-          'ai.schema':
-            outputStrategy.jsonSchema != null
-              ? { input: () => JSON.stringify(outputStrategy.jsonSchema) }
-              : undefined,
+          'ai.schema': {
+            input: async () =>
+              JSON.stringify(await outputStrategy.jsonSchema()),
+          },
           'ai.schema.name': schemaName,
           'ai.schema.description': schemaDescription,
           'ai.settings.output': outputStrategy.type,
@@ -507,7 +504,7 @@ class DefaultStreamObjectResult<PARTIAL, RESULT, ELEMENT_STREAM>
         const callOptions = {
           responseFormat: {
             type: 'json' as const,
-            schema: outputStrategy.jsonSchema,
+            schema: await outputStrategy.jsonSchema(),
             name: schemaName,
             description: schemaDescription,
           },
@@ -524,7 +521,7 @@ class DefaultStreamObjectResult<PARTIAL, RESULT, ELEMENT_STREAM>
         };
 
         const transformer: Transformer<
-          LanguageModelV2StreamPart,
+          LanguageModelV3StreamPart,
           ObjectStreamInputPart
         > = {
           transform: (chunk, controller) => {
@@ -586,13 +583,13 @@ class DefaultStreamObjectResult<PARTIAL, RESULT, ELEMENT_STREAM>
         self._request.resolve(request ?? {});
 
         // store information for onFinish callback:
-        let warnings: LanguageModelV2CallWarning[] | undefined;
+        let warnings: SharedV3Warning[] | undefined;
         let usage: LanguageModelUsage = {
           inputTokens: undefined,
           outputTokens: undefined,
           totalTokens: undefined,
         };
-        let finishReason: LanguageModelV2FinishReason | undefined;
+        let finishReason: LanguageModelV3FinishReason | undefined;
         let providerMetadata: ProviderMetadata | undefined;
         let object: RESULT | undefined;
         let error: unknown | undefined;
@@ -728,7 +725,11 @@ class DefaultStreamObjectResult<PARTIAL, RESULT, ELEMENT_STREAM>
                     });
 
                     // log warnings:
-                    logWarnings(warnings ?? []);
+                    logWarnings({
+                      warnings: warnings ?? [],
+                      provider: model.provider,
+                      model: model.modelId,
+                    });
 
                     // resolve promises that can be resolved now:
                     self._usage.resolve(usage);
@@ -776,7 +777,7 @@ class DefaultStreamObjectResult<PARTIAL, RESULT, ELEMENT_STREAM>
                   };
 
                   doStreamSpan.setAttributes(
-                    selectTelemetryAttributes({
+                    await selectTelemetryAttributes({
                       telemetry,
                       attributes: {
                         'ai.response.finishReason': finishReason,
@@ -812,7 +813,7 @@ class DefaultStreamObjectResult<PARTIAL, RESULT, ELEMENT_STREAM>
 
                   // Add response information to the root span:
                   rootSpan.setAttributes(
-                    selectTelemetryAttributes({
+                    await selectTelemetryAttributes({
                       telemetry,
                       attributes: {
                         'ai.usage.inputTokens': finalUsage.inputTokens,
@@ -980,7 +981,7 @@ export type ObjectStreamInputPart =
   | string
   | {
       type: 'stream-start';
-      warnings: LanguageModelV2CallWarning[];
+      warnings: SharedV3Warning[];
     }
   | {
       type: 'error';
@@ -994,7 +995,7 @@ export type ObjectStreamInputPart =
     }
   | {
       type: 'finish';
-      finishReason: LanguageModelV2FinishReason;
-      usage: LanguageModelV2Usage;
-      providerMetadata?: SharedV2ProviderMetadata;
+      finishReason: LanguageModelV3FinishReason;
+      usage: LanguageModelV3Usage;
+      providerMetadata?: SharedV3ProviderMetadata;
     };

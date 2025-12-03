@@ -1,7 +1,7 @@
-import { convertHeadersToRecord, extractHeaders } from './headers-utils';
 import {
   FetchFunction,
   combineHeaders,
+  normalizeHeaders,
   withUserAgentSuffix,
   getRuntimeEnvironmentUserAgent,
 } from '@ai-sdk/provider-utils';
@@ -30,14 +30,27 @@ export function createSigV4FetchFunction(
     input: RequestInfo | URL,
     init?: RequestInit,
   ): Promise<Response> => {
-    const originalHeaders = extractHeaders(init?.headers);
+    const request = input instanceof Request ? input : undefined;
+    const originalHeaders = combineHeaders(
+      normalizeHeaders(request?.headers),
+      normalizeHeaders(init?.headers),
+    );
     const headersWithUserAgent = withUserAgentSuffix(
       originalHeaders,
       `ai-sdk/amazon-bedrock/${VERSION}`,
       getRuntimeEnvironmentUserAgent(),
     );
 
-    if (init?.method?.toUpperCase() !== 'POST' || !init?.body) {
+    let effectiveBody: BodyInit | undefined = init?.body ?? undefined;
+    if (effectiveBody === undefined && request && request.body !== null) {
+      try {
+        effectiveBody = await request.clone().text();
+      } catch {}
+    }
+
+    const effectiveMethod = init?.method ?? request?.method;
+
+    if (effectiveMethod?.toUpperCase() !== 'POST' || !effectiveBody) {
       return fetch(input, {
         ...init,
         headers: headersWithUserAgent as HeadersInit,
@@ -51,7 +64,7 @@ export function createSigV4FetchFunction(
           ? input.href
           : input.url;
 
-    const body = prepareBodyString(init.body);
+    const body = prepareBodyString(effectiveBody);
     const credentials = await getCredentials();
     const signer = new AwsV4Signer({
       url,
@@ -66,7 +79,7 @@ export function createSigV4FetchFunction(
     });
 
     const signingResult = await signer.sign();
-    const signedHeaders = convertHeadersToRecord(signingResult.headers);
+    const signedHeaders = normalizeHeaders(signingResult.headers);
 
     // Use the combined headers directly as HeadersInit
     const combinedHeaders = combineHeaders(headersWithUserAgent, signedHeaders);
@@ -106,7 +119,7 @@ export function createApiKeyFetchFunction(
     input: RequestInfo | URL,
     init?: RequestInit,
   ): Promise<Response> => {
-    const originalHeaders = extractHeaders(init?.headers);
+    const originalHeaders = normalizeHeaders(init?.headers);
     const headersWithUserAgent = withUserAgentSuffix(
       originalHeaders,
       `ai-sdk/amazon-bedrock/${VERSION}`,

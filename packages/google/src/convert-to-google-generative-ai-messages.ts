@@ -1,5 +1,5 @@
 import {
-  LanguageModelV2Prompt,
+  LanguageModelV3Prompt,
   UnsupportedFunctionalityError,
 } from '@ai-sdk/provider';
 import {
@@ -10,7 +10,7 @@ import {
 import { convertToBase64 } from '@ai-sdk/provider-utils';
 
 export function convertToGoogleGenerativeAIMessages(
-  prompt: LanguageModelV2Prompt,
+  prompt: LanguageModelV3Prompt,
   options?: { isGemmaModel?: boolean },
 ): GoogleGenerativeAIPrompt {
   const systemInstructionParts: Array<{ text: string }> = [];
@@ -81,14 +81,18 @@ export function convertToGoogleGenerativeAIMessages(
           role: 'model',
           parts: content
             .map(part => {
+              const thoughtSignature =
+                part.providerOptions?.google?.thoughtSignature != null
+                  ? String(part.providerOptions.google?.thoughtSignature)
+                  : undefined;
+
               switch (part.type) {
                 case 'text': {
                   return part.text.length === 0
                     ? undefined
                     : {
                         text: part.text,
-                        thoughtSignature:
-                          part.providerOptions?.google?.thoughtSignature,
+                        thoughtSignature,
                       };
                 }
 
@@ -98,19 +102,11 @@ export function convertToGoogleGenerativeAIMessages(
                     : {
                         text: part.text,
                         thought: true,
-                        thoughtSignature:
-                          part.providerOptions?.google?.thoughtSignature,
+                        thoughtSignature,
                       };
                 }
 
                 case 'file': {
-                  if (part.mediaType !== 'image/png') {
-                    throw new UnsupportedFunctionalityError({
-                      functionality:
-                        'Only PNG images are supported in assistant messages',
-                    });
-                  }
-
                   if (part.data instanceof URL) {
                     throw new UnsupportedFunctionalityError({
                       functionality:
@@ -123,6 +119,7 @@ export function convertToGoogleGenerativeAIMessages(
                       mimeType: part.mediaType,
                       data: convertToBase64(part.data),
                     },
+                    thoughtSignature,
                   };
                 }
 
@@ -132,8 +129,7 @@ export function convertToGoogleGenerativeAIMessages(
                       name: part.toolName,
                       args: part.input,
                     },
-                    thoughtSignature:
-                      part.providerOptions?.google?.thoughtSignature,
+                    thoughtSignature,
                   };
                 }
               }
@@ -165,7 +161,7 @@ export function convertToGoogleGenerativeAIMessages(
                     },
                   });
                   break;
-                case 'media':
+                case 'image-data':
                   parts.push(
                     {
                       inlineData: {
@@ -189,7 +185,10 @@ export function convertToGoogleGenerativeAIMessages(
                 name: part.toolName,
                 response: {
                   name: part.toolName,
-                  content: output.value,
+                  content:
+                    output.type === 'execution-denied'
+                      ? (output.reason ?? 'Tool execution denied.')
+                      : output.value,
                 },
               },
             });

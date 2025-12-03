@@ -1,4 +1,4 @@
-import { ImageModelV2, ImageModelV2CallWarning } from '@ai-sdk/provider';
+import { ImageModelV3, SharedV3Warning } from '@ai-sdk/provider';
 import {
   FetchFunction,
   Resolvable,
@@ -24,8 +24,8 @@ type BedrockImageModelConfig = {
   };
 };
 
-export class BedrockImageModel implements ImageModelV2 {
-  readonly specificationVersion = 'v2';
+export class BedrockImageModel implements ImageModelV3 {
+  readonly specificationVersion = 'v3';
   readonly provider = 'amazon-bedrock';
 
   get maxImagesPerCall(): number {
@@ -51,10 +51,10 @@ export class BedrockImageModel implements ImageModelV2 {
     providerOptions,
     headers,
     abortSignal,
-  }: Parameters<ImageModelV2['doGenerate']>[0]): Promise<
-    Awaited<ReturnType<ImageModelV2['doGenerate']>>
+  }: Parameters<ImageModelV3['doGenerate']>[0]): Promise<
+    Awaited<ReturnType<ImageModelV3['doGenerate']>>
   > {
-    const warnings: Array<ImageModelV2CallWarning> = [];
+    const warnings: Array<SharedV3Warning> = [];
     const [width, height] = size ? size.split('x').map(Number) : [];
     const args = {
       taskType: 'TEXT_IMAGE',
@@ -87,8 +87,8 @@ export class BedrockImageModel implements ImageModelV2 {
 
     if (aspectRatio != undefined) {
       warnings.push({
-        type: 'unsupported-setting',
-        setting: 'aspectRatio',
+        type: 'unsupported',
+        feature: 'aspectRatio',
         details:
           'This model does not support aspect ratio. Use `size` instead.',
       });

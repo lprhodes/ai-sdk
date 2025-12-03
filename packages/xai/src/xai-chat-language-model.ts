@@ -1,10 +1,10 @@
 import {
-  LanguageModelV2,
-  LanguageModelV2CallWarning,
-  LanguageModelV2Content,
-  LanguageModelV2FinishReason,
-  LanguageModelV2StreamPart,
-  LanguageModelV2Usage,
+  LanguageModelV3,
+  SharedV3Warning,
+  LanguageModelV3Content,
+  LanguageModelV3FinishReason,
+  LanguageModelV3StreamPart,
+  LanguageModelV3Usage,
 } from '@ai-sdk/provider';
 import {
   combineHeaders,
@@ -31,8 +31,8 @@ type XaiChatConfig = {
   fetch?: FetchFunction;
 };
 
-export class XaiChatLanguageModel implements LanguageModelV2 {
-  readonly specificationVersion = 'v2';
+export class XaiChatLanguageModel implements LanguageModelV3 {
+  readonly specificationVersion = 'v3';
 
   readonly modelId: XaiChatModelId;
 
@@ -65,8 +65,8 @@ export class XaiChatLanguageModel implements LanguageModelV2 {
     providerOptions,
     tools,
     toolChoice,
-  }: Parameters<LanguageModelV2['doGenerate']>[0]) {
-    const warnings: LanguageModelV2CallWarning[] = [];
+  }: Parameters<LanguageModelV3['doGenerate']>[0]) {
+    const warnings: SharedV3Warning[] = [];
 
     // parse xai-specific provider options
     const options =
@@ -78,43 +78,19 @@ export class XaiChatLanguageModel implements LanguageModelV2 {
 
     // check for unsupported parameters
     if (topK != null) {
-      warnings.push({
-        type: 'unsupported-setting',
-        setting: 'topK',
-      });
+      warnings.push({ type: 'unsupported', feature: 'topK' });
     }
 
     if (frequencyPenalty != null) {
-      warnings.push({
-        type: 'unsupported-setting',
-        setting: 'frequencyPenalty',
-      });
+      warnings.push({ type: 'unsupported', feature: 'frequencyPenalty' });
     }
 
     if (presencePenalty != null) {
-      warnings.push({
-        type: 'unsupported-setting',
-        setting: 'presencePenalty',
-      });
+      warnings.push({ type: 'unsupported', feature: 'presencePenalty' });
     }
 
     if (stopSequences != null) {
-      warnings.push({
-        type: 'unsupported-setting',
-        setting: 'stopSequences',
-      });
-    }
-
-    if (
-      responseFormat != null &&
-      responseFormat.type === 'json' &&
-      responseFormat.schema != null
-    ) {
-      warnings.push({
-        type: 'unsupported-setting',
-        setting: 'responseFormat',
-        details: 'JSON response format schema is not supported',
-      });
+      warnings.push({ type: 'unsupported', feature: 'stopSequences' });
     }
 
     // convert ai sdk messages to xai format
@@ -143,6 +119,9 @@ export class XaiChatLanguageModel implements LanguageModelV2 {
       top_p: topP,
       seed,
       reasoning_effort: options.reasoningEffort,
+
+      // parallel function calling
+      parallel_function_calling: options.parallel_function_calling,
 
       // response format
       response_format:
@@ -208,8 +187,8 @@ export class XaiChatLanguageModel implements LanguageModelV2 {
   }
 
   async doGenerate(
-    options: Parameters<LanguageModelV2['doGenerate']>[0],
-  ): Promise<Awaited<ReturnType<LanguageModelV2['doGenerate']>>> {
+    options: Parameters<LanguageModelV3['doGenerate']>[0],
+  ): Promise<Awaited<ReturnType<LanguageModelV3['doGenerate']>>> {
     const { args: body, warnings } = await this.getArgs(options);
 
     const {
@@ -229,7 +208,7 @@ export class XaiChatLanguageModel implements LanguageModelV2 {
     });
 
     const choice = response.choices[0];
-    const content: Array<LanguageModelV2Content> = [];
+    const content: Array<LanguageModelV3Content> = [];
 
     // extract text content
     if (choice.message.content != null && choice.message.content.length > 0) {
@@ -291,6 +270,8 @@ export class XaiChatLanguageModel implements LanguageModelV2 {
         reasoningTokens:
           response.usage.completion_tokens_details?.reasoning_tokens ??
           undefined,
+        cachedInputTokens:
+          response.usage.prompt_tokens_details?.cached_tokens ?? undefined,
       },
       request: { body },
       response: {
@@ -303,8 +284,8 @@ export class XaiChatLanguageModel implements LanguageModelV2 {
   }
 
   async doStream(
-    options: Parameters<LanguageModelV2['doStream']>[0],
-  ): Promise<Awaited<ReturnType<LanguageModelV2['doStream']>>> {
+    options: Parameters<LanguageModelV3['doStream']>[0],
+  ): Promise<Awaited<ReturnType<LanguageModelV3['doStream']>>> {
     const { args, warnings } = await this.getArgs(options);
     const body = {
       ...args,
@@ -325,11 +306,13 @@ export class XaiChatLanguageModel implements LanguageModelV2 {
       fetch: this.config.fetch,
     });
 
-    let finishReason: LanguageModelV2FinishReason = 'unknown';
-    const usage: LanguageModelV2Usage = {
+    let finishReason: LanguageModelV3FinishReason = 'unknown';
+    const usage: LanguageModelV3Usage = {
       inputTokens: undefined,
       outputTokens: undefined,
       totalTokens: undefined,
+      reasoningTokens: undefined,
+      cachedInputTokens: undefined,
     };
     let isFirstChunk = true;
     const contentBlocks: Record<string, { type: 'text' | 'reasoning' }> = {};
@@ -341,7 +324,7 @@ export class XaiChatLanguageModel implements LanguageModelV2 {
       stream: response.pipeThrough(
         new TransformStream<
           ParseResult<z.infer<typeof xaiChatChunkSchema>>,
-          LanguageModelV2StreamPart
+          LanguageModelV3StreamPart
         >({
           start(controller) {
             controller.enqueue({ type: 'stream-start', warnings });
@@ -389,6 +372,8 @@ export class XaiChatLanguageModel implements LanguageModelV2 {
               usage.reasoningTokens =
                 value.usage.completion_tokens_details?.reasoning_tokens ??
                 undefined;
+              usage.cachedInputTokens =
+                value.usage.prompt_tokens_details?.cached_tokens ?? undefined;
             }
 
             const choice = value.choices[0];
@@ -520,9 +505,20 @@ const xaiUsageSchema = z.object({
   prompt_tokens: z.number(),
   completion_tokens: z.number(),
   total_tokens: z.number(),
+  prompt_tokens_details: z
+    .object({
+      text_tokens: z.number().nullish(),
+      audio_tokens: z.number().nullish(),
+      image_tokens: z.number().nullish(),
+      cached_tokens: z.number().nullish(),
+    })
+    .nullish(),
   completion_tokens_details: z
     .object({
       reasoning_tokens: z.number().nullish(),
+      audio_tokens: z.number().nullish(),
+      accepted_prediction_tokens: z.number().nullish(),
+      rejected_prediction_tokens: z.number().nullish(),
     })
     .nullish(),
 });

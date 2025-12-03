@@ -1,4 +1,4 @@
-import { ImageModelV2, ImageModelV2CallWarning } from '@ai-sdk/provider';
+import { ImageModelV3, SharedV3Warning } from '@ai-sdk/provider';
 import {
   combineHeaders,
   createJsonErrorResponseHandler,
@@ -24,8 +24,8 @@ export type OpenAICompatibleImageModelConfig = {
   };
 };
 
-export class OpenAICompatibleImageModel implements ImageModelV2 {
-  readonly specificationVersion = 'v2';
+export class OpenAICompatibleImageModel implements ImageModelV3 {
+  readonly specificationVersion = 'v3';
   readonly maxImagesPerCall = 10;
 
   get provider(): string {
@@ -46,22 +46,22 @@ export class OpenAICompatibleImageModel implements ImageModelV2 {
     providerOptions,
     headers,
     abortSignal,
-  }: Parameters<ImageModelV2['doGenerate']>[0]): Promise<
-    Awaited<ReturnType<ImageModelV2['doGenerate']>>
+  }: Parameters<ImageModelV3['doGenerate']>[0]): Promise<
+    Awaited<ReturnType<ImageModelV3['doGenerate']>>
   > {
-    const warnings: Array<ImageModelV2CallWarning> = [];
+    const warnings: Array<SharedV3Warning> = [];
 
     if (aspectRatio != null) {
       warnings.push({
-        type: 'unsupported-setting',
-        setting: 'aspectRatio',
+        type: 'unsupported',
+        feature: 'aspectRatio',
         details:
           'This model does not support aspect ratio. Use `size` instead.',
       });
     }
 
     if (seed != null) {
-      warnings.push({ type: 'unsupported-setting', setting: 'seed' });
+      warnings.push({ type: 'unsupported', feature: 'seed' });
     }
 
     const currentDate = this.config._internal?.currentDate?.() ?? new Date();

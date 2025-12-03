@@ -1,9 +1,10 @@
-import { LanguageModelV2FinishReason } from '@ai-sdk/provider';
+import { LanguageModelV3FinishReason } from '@ai-sdk/provider';
 import { BedrockStopReason } from './bedrock-api-types';
 
 export function mapBedrockFinishReason(
-  finishReason?: BedrockStopReason,
-): LanguageModelV2FinishReason {
+  finishReason: BedrockStopReason,
+  isJsonResponseFromTool?: boolean,
+): LanguageModelV3FinishReason {
   switch (finishReason) {
     case 'stop_sequence':
     case 'end_turn':
@@ -14,7 +15,7 @@ export function mapBedrockFinishReason(
     case 'guardrail_intervened':
       return 'content-filter';
     case 'tool_use':
-      return 'tool-calls';
+      return isJsonResponseFromTool ? 'stop' : 'tool-calls';
     default:
       return 'unknown';
   }

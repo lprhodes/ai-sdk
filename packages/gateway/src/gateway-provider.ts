@@ -1,4 +1,3 @@
-import { NoSuchModelError } from '@ai-sdk/provider';
 import {
   loadOptionalSetting,
   withoutTrailingSlash,
@@ -12,25 +11,31 @@ import {
 import {
   GatewayFetchMetadata,
   type GatewayFetchMetadataResponse,
+  type GatewayCreditsResponse,
 } from './gateway-fetch-metadata';
 import { GatewayLanguageModel } from './gateway-language-model';
 import { GatewayEmbeddingModel } from './gateway-embedding-model';
+import { GatewayImageModel } from './gateway-image-model';
 import type { GatewayEmbeddingModelId } from './gateway-embedding-model-settings';
+import type { GatewayImageModelId } from './gateway-image-model-settings';
 import { getVercelOidcToken, getVercelRequestId } from './vercel-environment';
 import type { GatewayModelId } from './gateway-language-model-settings';
 import type {
-  LanguageModelV2,
-  EmbeddingModelV2,
-  ProviderV2,
+  LanguageModelV3,
+  EmbeddingModelV3,
+  ImageModelV3,
+  ProviderV3,
 } from '@ai-sdk/provider';
+import { withUserAgentSuffix } from '@ai-sdk/provider-utils';
+import { VERSION } from './version';
 
-export interface GatewayProvider extends ProviderV2 {
-  (modelId: GatewayModelId): LanguageModelV2;
+export interface GatewayProvider extends ProviderV3 {
+  (modelId: GatewayModelId): LanguageModelV3;
 
   /**
 Creates a model for text generation.
 */
-  languageModel(modelId: GatewayModelId): LanguageModelV2;
+  languageModel(modelId: GatewayModelId): LanguageModelV3;
 
   /**
 Returns available providers and models for use with the remote provider.
@@ -38,11 +43,19 @@ Returns available providers and models for use with the remote provider.
   getAvailableModels(): Promise<GatewayFetchMetadataResponse>;
 
   /**
+Returns credit information for the authenticated user.
+ */
+  getCredits(): Promise<GatewayCreditsResponse>;
+
+  /**
 Creates a model for generating text embeddings.
 */
-  textEmbeddingModel(
-    modelId: GatewayEmbeddingModelId,
-  ): EmbeddingModelV2<string>;
+  embeddingModel(modelId: GatewayEmbeddingModelId): EmbeddingModelV3;
+
+  /**
+Creates a model for generating images.
+*/
+  imageModel(modelId: GatewayImageModelId): ImageModelV3;
 }
 
 export interface GatewayProviderSettings {
@@ -101,12 +114,15 @@ export function createGatewayProvider(
   const getHeaders = async () => {
     const auth = await getGatewayAuthToken(options);
     if (auth) {
-      return {
-        Authorization: `Bearer ${auth.token}`,
-        'ai-gateway-protocol-version': AI_GATEWAY_PROTOCOL_VERSION,
-        [GATEWAY_AUTH_METHOD_HEADER]: auth.authMethod,
-        ...options.headers,
-      };
+      return withUserAgentSuffix(
+        {
+          Authorization: `Bearer ${auth.token}`,
+          'ai-gateway-protocol-version': AI_GATEWAY_PROTOCOL_VERSION,
+          [GATEWAY_AUTH_METHOD_HEADER]: auth.authMethod,
+          ...options.headers,
+        },
+        `ai-sdk/gateway/${VERSION}`,
+      );
     }
 
     throw GatewayAuthenticationError.createContextualError({
@@ -167,11 +183,29 @@ export function createGatewayProvider(
           return metadata;
         })
         .catch(async (error: unknown) => {
-          throw asGatewayError(error, parseAuthMethod(await getHeaders()));
+          throw await asGatewayError(
+            error,
+            await parseAuthMethod(await getHeaders()),
+          );
         });
     }
 
     return metadataCache ? Promise.resolve(metadataCache) : pendingMetadata;
+  };
+
+  const getCredits = async () => {
+    return new GatewayFetchMetadata({
+      baseURL,
+      headers: getHeaders,
+      fetch: options.fetch,
+    })
+      .getCredits()
+      .catch(async (error: unknown) => {
+        throw await asGatewayError(
+          error,
+          await parseAuthMethod(await getHeaders()),
+        );
+      });
   };
 
   const provider = function (modelId: GatewayModelId) {
@@ -184,12 +218,20 @@ export function createGatewayProvider(
     return createLanguageModel(modelId);
   };
 
+  provider.specificationVersion = 'v3' as const;
   provider.getAvailableModels = getAvailableModels;
-  provider.imageModel = (modelId: string) => {
-    throw new NoSuchModelError({ modelId, modelType: 'imageModel' });
+  provider.getCredits = getCredits;
+  provider.imageModel = (modelId: GatewayImageModelId) => {
+    return new GatewayImageModel(modelId, {
+      provider: 'gateway',
+      baseURL,
+      headers: getHeaders,
+      fetch: options.fetch,
+      o11yHeaders: createO11yHeaders(),
+    });
   };
   provider.languageModel = createLanguageModel;
-  provider.textEmbeddingModel = (modelId: GatewayEmbeddingModelId) => {
+  provider.embeddingModel = (modelId: GatewayEmbeddingModelId) => {
     return new GatewayEmbeddingModel(modelId, {
       provider: 'gateway',
       baseURL,

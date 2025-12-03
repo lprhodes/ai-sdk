@@ -1,11 +1,12 @@
 import {
-  EmbeddingModelV2,
-  ImageModelV2,
-  LanguageModelV2,
+  EmbeddingModelV3,
+  ImageModelV3,
+  LanguageModelV3,
   NoSuchModelError,
-  ProviderV2,
-  SpeechModelV2,
-  TranscriptionModelV2,
+  ProviderV3,
+  RerankingModelV3,
+  SpeechModelV3,
+  TranscriptionModelV3,
 } from '@ai-sdk/provider';
 import { wrapLanguageModel } from '../middleware/wrap-language-model';
 import { LanguageModelMiddleware } from '../types';
@@ -18,53 +19,62 @@ type ExtractLiteralUnion<T> = T extends string
   : never;
 
 export interface ProviderRegistryProvider<
-  PROVIDERS extends Record<string, ProviderV2> = Record<string, ProviderV2>,
+  PROVIDERS extends Record<string, ProviderV3> = Record<string, ProviderV3>,
   SEPARATOR extends string = ':',
 > {
   languageModel<KEY extends keyof PROVIDERS>(
     id: KEY extends string
       ? `${KEY & string}${SEPARATOR}${ExtractLiteralUnion<Parameters<NonNullable<PROVIDERS[KEY]['languageModel']>>[0]>}`
       : never,
-  ): LanguageModelV2;
+  ): LanguageModelV3;
   languageModel<KEY extends keyof PROVIDERS>(
     id: KEY extends string ? `${KEY & string}${SEPARATOR}${string}` : never,
-  ): LanguageModelV2;
+  ): LanguageModelV3;
 
-  textEmbeddingModel<KEY extends keyof PROVIDERS>(
+  embeddingModel<KEY extends keyof PROVIDERS>(
     id: KEY extends string
-      ? `${KEY & string}${SEPARATOR}${ExtractLiteralUnion<Parameters<NonNullable<PROVIDERS[KEY]['textEmbeddingModel']>>[0]>}`
+      ? `${KEY & string}${SEPARATOR}${ExtractLiteralUnion<Parameters<NonNullable<PROVIDERS[KEY]['embeddingModel']>>[0]>}`
       : never,
-  ): EmbeddingModelV2<string>;
-  textEmbeddingModel<KEY extends keyof PROVIDERS>(
+  ): EmbeddingModelV3;
+  embeddingModel<KEY extends keyof PROVIDERS>(
     id: KEY extends string ? `${KEY & string}${SEPARATOR}${string}` : never,
-  ): EmbeddingModelV2<string>;
+  ): EmbeddingModelV3;
 
   imageModel<KEY extends keyof PROVIDERS>(
     id: KEY extends string
       ? `${KEY & string}${SEPARATOR}${ExtractLiteralUnion<Parameters<NonNullable<PROVIDERS[KEY]['imageModel']>>[0]>}`
       : never,
-  ): ImageModelV2;
+  ): ImageModelV3;
   imageModel<KEY extends keyof PROVIDERS>(
     id: KEY extends string ? `${KEY & string}${SEPARATOR}${string}` : never,
-  ): ImageModelV2;
+  ): ImageModelV3;
 
   transcriptionModel<KEY extends keyof PROVIDERS>(
     id: KEY extends string
       ? `${KEY & string}${SEPARATOR}${ExtractLiteralUnion<Parameters<NonNullable<PROVIDERS[KEY]['transcriptionModel']>>[0]>}`
       : never,
-  ): TranscriptionModelV2;
+  ): TranscriptionModelV3;
   transcriptionModel<KEY extends keyof PROVIDERS>(
     id: KEY extends string ? `${KEY & string}${SEPARATOR}${string}` : never,
-  ): TranscriptionModelV2;
+  ): TranscriptionModelV3;
 
   speechModel<KEY extends keyof PROVIDERS>(
     id: KEY extends string
       ? `${KEY & string}${SEPARATOR}${ExtractLiteralUnion<Parameters<NonNullable<PROVIDERS[KEY]['speechModel']>>[0]>}`
       : never,
-  ): SpeechModelV2;
+  ): SpeechModelV3;
   speechModel<KEY extends keyof PROVIDERS>(
     id: KEY extends string ? `${KEY & string}${SEPARATOR}${string}` : never,
-  ): SpeechModelV2;
+  ): SpeechModelV3;
+
+  rerankingModel<KEY extends keyof PROVIDERS>(
+    id: KEY extends string
+      ? `${KEY & string}${SEPARATOR}${ExtractLiteralUnion<Parameters<NonNullable<PROVIDERS[KEY]['rerankingModel']>>[0]>}`
+      : never,
+  ): RerankingModelV3;
+  rerankingModel<KEY extends keyof PROVIDERS>(
+    id: KEY extends string ? `${KEY & string}${SEPARATOR}${string}` : never,
+  ): RerankingModelV3;
 }
 
 /**
@@ -80,7 +90,7 @@ export interface ProviderRegistryProvider<
  * @returns A new ProviderRegistryProvider instance that provides access to all registered providers with optional middleware applied to language models.
  */
 export function createProviderRegistry<
-  PROVIDERS extends Record<string, ProviderV2>,
+  PROVIDERS extends Record<string, ProviderV3>,
   SEPARATOR extends string = ':',
 >(
   providers: PROVIDERS,
@@ -115,7 +125,7 @@ export function createProviderRegistry<
 export const experimental_createProviderRegistry = createProviderRegistry;
 
 class DefaultProviderRegistry<
-  PROVIDERS extends Record<string, ProviderV2>,
+  PROVIDERS extends Record<string, ProviderV3>,
   SEPARATOR extends string,
 > implements ProviderRegistryProvider<PROVIDERS, SEPARATOR>
 {
@@ -152,11 +162,12 @@ class DefaultProviderRegistry<
     id: string,
     modelType:
       | 'languageModel'
-      | 'textEmbeddingModel'
+      | 'embeddingModel'
       | 'imageModel'
       | 'transcriptionModel'
-      | 'speechModel',
-  ): ProviderV2 {
+      | 'speechModel'
+      | 'rerankingModel',
+  ): ProviderV3 {
     const provider = this.providers[id as keyof PROVIDERS];
 
     if (provider == null) {
@@ -175,10 +186,11 @@ class DefaultProviderRegistry<
     id: string,
     modelType:
       | 'languageModel'
-      | 'textEmbeddingModel'
+      | 'embeddingModel'
       | 'imageModel'
       | 'transcriptionModel'
-      | 'speechModel',
+      | 'speechModel'
+      | 'rerankingModel',
   ): [string, string] {
     const index = id.indexOf(this.separator);
 
@@ -197,7 +209,7 @@ class DefaultProviderRegistry<
 
   languageModel<KEY extends keyof PROVIDERS>(
     id: `${KEY & string}${SEPARATOR}${string}`,
-  ): LanguageModelV2 {
+  ): LanguageModelV3 {
     const [providerId, modelId] = this.splitId(id, 'languageModel');
     let model = this.getProvider(providerId, 'languageModel').languageModel?.(
       modelId,
@@ -217,18 +229,18 @@ class DefaultProviderRegistry<
     return model;
   }
 
-  textEmbeddingModel<KEY extends keyof PROVIDERS>(
+  embeddingModel<KEY extends keyof PROVIDERS>(
     id: `${KEY & string}${SEPARATOR}${string}`,
-  ): EmbeddingModelV2<string> {
-    const [providerId, modelId] = this.splitId(id, 'textEmbeddingModel');
-    const provider = this.getProvider(providerId, 'textEmbeddingModel');
+  ): EmbeddingModelV3 {
+    const [providerId, modelId] = this.splitId(id, 'embeddingModel');
+    const provider = this.getProvider(providerId, 'embeddingModel');
 
-    const model = provider.textEmbeddingModel?.(modelId);
+    const model = provider.embeddingModel?.(modelId);
 
     if (model == null) {
       throw new NoSuchModelError({
         modelId: id,
-        modelType: 'textEmbeddingModel',
+        modelType: 'embeddingModel',
       });
     }
 
@@ -237,7 +249,7 @@ class DefaultProviderRegistry<
 
   imageModel<KEY extends keyof PROVIDERS>(
     id: `${KEY & string}${SEPARATOR}${string}`,
-  ): ImageModelV2 {
+  ): ImageModelV3 {
     const [providerId, modelId] = this.splitId(id, 'imageModel');
     const provider = this.getProvider(providerId, 'imageModel');
 
@@ -252,7 +264,7 @@ class DefaultProviderRegistry<
 
   transcriptionModel<KEY extends keyof PROVIDERS>(
     id: `${KEY & string}${SEPARATOR}${string}`,
-  ): TranscriptionModelV2 {
+  ): TranscriptionModelV3 {
     const [providerId, modelId] = this.splitId(id, 'transcriptionModel');
     const provider = this.getProvider(providerId, 'transcriptionModel');
 
@@ -270,7 +282,7 @@ class DefaultProviderRegistry<
 
   speechModel<KEY extends keyof PROVIDERS>(
     id: `${KEY & string}${SEPARATOR}${string}`,
-  ): SpeechModelV2 {
+  ): SpeechModelV3 {
     const [providerId, modelId] = this.splitId(id, 'speechModel');
     const provider = this.getProvider(providerId, 'speechModel');
 
@@ -278,6 +290,21 @@ class DefaultProviderRegistry<
 
     if (model == null) {
       throw new NoSuchModelError({ modelId: id, modelType: 'speechModel' });
+    }
+
+    return model;
+  }
+
+  rerankingModel<KEY extends keyof PROVIDERS>(
+    id: `${KEY & string}${SEPARATOR}${string}`,
+  ): RerankingModelV3 {
+    const [providerId, modelId] = this.splitId(id, 'rerankingModel');
+    const provider = this.getProvider(providerId, 'rerankingModel');
+
+    const model = provider.rerankingModel?.(modelId);
+
+    if (model == null) {
+      throw new NoSuchModelError({ modelId: id, modelType: 'rerankingModel' });
     }
 
     return model;

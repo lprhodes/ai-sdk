@@ -1,8 +1,12 @@
-import { EmbeddingModelV2Embedding } from '@ai-sdk/provider';
-import { createTestServer } from '@ai-sdk/provider-utils/test';
+import { EmbeddingModelV3Embedding } from '@ai-sdk/provider';
+import { createTestServer } from '@ai-sdk/test-server/with-vitest';
 import { GoogleGenerativeAIEmbeddingModel } from './google-generative-ai-embedding-model';
 import { createGoogleGenerativeAI } from './google-provider';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('./version', () => ({
+  VERSION: '0.0.0-test',
+}));
 
 const dummyEmbeddings = [
   [0.1, 0.2, 0.3, 0.4, 0.5],
@@ -11,7 +15,7 @@ const dummyEmbeddings = [
 const testValues = ['sunny day at the beach', 'rainy day in the city'];
 
 const provider = createGoogleGenerativeAI({ apiKey: 'test-api-key' });
-const model = provider.textEmbeddingModel('gemini-embedding-001');
+const model = provider.embeddingModel('gemini-embedding-001');
 
 const URL =
   'https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:something';
@@ -25,7 +29,7 @@ describe('GoogleGenerativeAIEmbeddingModel', () => {
     embeddings = dummyEmbeddings,
     headers,
   }: {
-    embeddings?: EmbeddingModelV2Embedding[];
+    embeddings?: EmbeddingModelV3Embedding[];
     headers?: Record<string, string>;
   } = {}) {
     server.urls[URL].response = {
@@ -41,7 +45,7 @@ describe('GoogleGenerativeAIEmbeddingModel', () => {
     embeddings = dummyEmbeddings,
     headers,
   }: {
-    embeddings?: EmbeddingModelV2Embedding[];
+    embeddings?: EmbeddingModelV3Embedding[];
     headers?: Record<string, string>;
   } = {}) {
     server.urls[URL].response = {
@@ -153,6 +157,9 @@ describe('GoogleGenerativeAIEmbeddingModel', () => {
       'custom-provider-header': 'provider-header-value',
       'custom-request-header': 'request-header-value',
     });
+    expect(server.calls[0].requestUserAgent).toContain(
+      `ai-sdk/google/0.0.0-test`,
+    );
   });
 
   it('should throw an error if too many values are provided', async () => {
@@ -171,7 +178,7 @@ describe('GoogleGenerativeAIEmbeddingModel', () => {
 
   it('should use the batch embeddings endpoint', async () => {
     prepareBatchJsonResponse();
-    const model = provider.textEmbeddingModel('gemini-embedding-001');
+    const model = provider.embeddingModel('gemini-embedding-001');
     await model.doEmbed({
       values: testValues,
     });
@@ -184,7 +191,7 @@ describe('GoogleGenerativeAIEmbeddingModel', () => {
   it('should use the single embeddings endpoint', async () => {
     prepareSingleJsonResponse();
 
-    const model = provider.textEmbeddingModel('gemini-embedding-001');
+    const model = provider.embeddingModel('gemini-embedding-001');
 
     await model.doEmbed({
       values: [testValues[0]],

@@ -1,9 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { prepareTools } from './anthropic-prepare-tools';
+import { CacheControlValidator } from './get-cache-control';
 
 describe('prepareTools', () => {
-  it('should return undefined tools and tool_choice when tools are null', () => {
-    const result = prepareTools({ tools: undefined });
+  it('should return undefined tools and tool_choice when tools are null', async () => {
+    const result = await prepareTools({
+      tools: undefined,
+      toolChoice: undefined,
+    });
     expect(result).toEqual({
       tools: undefined,
       tool_choice: undefined,
@@ -12,8 +16,8 @@ describe('prepareTools', () => {
     });
   });
 
-  it('should return undefined tools and tool_choice when tools are empty', () => {
-    const result = prepareTools({ tools: [] });
+  it('should return undefined tools and tool_choice when tools are empty', async () => {
+    const result = await prepareTools({ tools: [], toolChoice: undefined });
     expect(result).toEqual({
       tools: undefined,
       tool_choice: undefined,
@@ -22,8 +26,8 @@ describe('prepareTools', () => {
     });
   });
 
-  it('should correctly prepare function tools', () => {
-    const result = prepareTools({
+  it('should correctly prepare function tools', async () => {
+    const result = await prepareTools({
       tools: [
         {
           type: 'function',
@@ -32,6 +36,7 @@ describe('prepareTools', () => {
           inputSchema: { type: 'object', properties: {} },
         },
       ],
+      toolChoice: undefined,
     });
     expect(result.tools).toEqual([
       {
@@ -44,80 +49,281 @@ describe('prepareTools', () => {
     expect(result.toolWarnings).toEqual([]);
   });
 
-  it('should correctly prepare provider-defined tools', () => {
-    const result = prepareTools({
-      tools: [
-        {
-          type: 'provider-defined',
-          id: 'anthropic.computer_20241022',
-          name: 'computer',
-          args: { displayWidthPx: 800, displayHeightPx: 600, displayNumber: 1 },
-        },
-        {
-          type: 'provider-defined',
-          id: 'anthropic.text_editor_20241022',
-          name: 'text_editor',
-          args: {},
-        },
-        {
-          type: 'provider-defined',
-          id: 'anthropic.bash_20241022',
-          name: 'bash',
-          args: {},
-        },
-      ],
+  describe('provider-defined tools', () => {
+    describe('computer_20241022', () => {
+      it('should correctly prepare computer_20241022 tool', async () => {
+        const result = await prepareTools({
+          tools: [
+            {
+              type: 'provider',
+              id: 'anthropic.computer_20241022',
+              name: 'computer',
+              args: {
+                displayWidthPx: 800,
+                displayHeightPx: 600,
+                displayNumber: 1,
+              },
+            },
+          ],
+          toolChoice: undefined,
+        });
+
+        expect(result).toMatchInlineSnapshot(`
+          {
+            "betas": Set {
+              "computer-use-2024-10-22",
+            },
+            "toolChoice": undefined,
+            "toolWarnings": [],
+            "tools": [
+              {
+                "cache_control": undefined,
+                "display_height_px": 600,
+                "display_number": 1,
+                "display_width_px": 800,
+                "name": "computer",
+                "type": "computer_20241022",
+              },
+            ],
+          }
+        `);
+      });
     });
-    expect(result.tools).toEqual([
-      {
-        name: 'computer',
-        type: 'computer_20241022',
-        display_width_px: 800,
-        display_height_px: 600,
-        display_number: 1,
-      },
-      {
-        name: 'str_replace_editor',
-        type: 'text_editor_20241022',
-      },
-      {
-        name: 'bash',
-        type: 'bash_20241022',
-      },
-    ]);
-    expect(result.toolChoice).toBeUndefined();
-    expect(result.toolWarnings).toEqual([]);
+
+    describe('text_editor_20241022', () => {
+      it('should correctly prepare text_editor_20241022 tool', async () => {
+        const result = await prepareTools({
+          tools: [
+            {
+              type: 'provider',
+              id: 'anthropic.text_editor_20241022',
+              name: 'text_editor',
+              args: {},
+            },
+          ],
+          toolChoice: undefined,
+        });
+        expect(result).toMatchInlineSnapshot(`
+          {
+            "betas": Set {
+              "computer-use-2024-10-22",
+            },
+            "toolChoice": undefined,
+            "toolWarnings": [],
+            "tools": [
+              {
+                "cache_control": undefined,
+                "name": "str_replace_editor",
+                "type": "text_editor_20241022",
+              },
+            ],
+          }
+        `);
+      });
+    });
+
+    it('should correctly prepare bash_20241022 tool', async () => {
+      const result = await prepareTools({
+        tools: [
+          {
+            type: 'provider',
+            id: 'anthropic.bash_20241022',
+            name: 'bash',
+            args: {},
+          },
+        ],
+        toolChoice: undefined,
+      });
+
+      expect(result).toMatchInlineSnapshot(`
+        {
+          "betas": Set {
+            "computer-use-2024-10-22",
+          },
+          "toolChoice": undefined,
+          "toolWarnings": [],
+          "tools": [
+            {
+              "cache_control": undefined,
+              "name": "bash",
+              "type": "bash_20241022",
+            },
+          ],
+        }
+      `);
+    });
+
+    it('should correctly prepare text_editor_20250728 with max_characters', async () => {
+      const result = await prepareTools({
+        tools: [
+          {
+            type: 'provider',
+            id: 'anthropic.text_editor_20250728',
+            name: 'str_replace_based_edit_tool',
+            args: { maxCharacters: 10000 },
+          },
+        ],
+        toolChoice: undefined,
+      });
+      expect(result).toMatchInlineSnapshot(`
+        {
+          "betas": Set {},
+          "toolChoice": undefined,
+          "toolWarnings": [],
+          "tools": [
+            {
+              "cache_control": undefined,
+              "max_characters": 10000,
+              "name": "str_replace_based_edit_tool",
+              "type": "text_editor_20250728",
+            },
+          ],
+        }
+      `);
+    });
+
+    it('should correctly prepare text_editor_20250728 without max_characters', async () => {
+      const result = await prepareTools({
+        tools: [
+          {
+            type: 'provider',
+            id: 'anthropic.text_editor_20250728',
+            name: 'str_replace_based_edit_tool',
+            args: {},
+          },
+        ],
+        toolChoice: undefined,
+      });
+      expect(result).toMatchInlineSnapshot(`
+        {
+          "betas": Set {},
+          "toolChoice": undefined,
+          "toolWarnings": [],
+          "tools": [
+            {
+              "cache_control": undefined,
+              "max_characters": undefined,
+              "name": "str_replace_based_edit_tool",
+              "type": "text_editor_20250728",
+            },
+          ],
+        }
+      `);
+    });
+
+    it('should correctly prepare web_search_20250305', async () => {
+      const result = await prepareTools({
+        tools: [
+          {
+            type: 'provider',
+            id: 'anthropic.web_search_20250305',
+            name: 'web_search',
+            args: {
+              maxUses: 10,
+              allowedDomains: ['https://www.google.com'],
+              userLocation: { type: 'approximate', city: 'New York' },
+            },
+          },
+        ],
+        toolChoice: undefined,
+      });
+      expect(result).toMatchInlineSnapshot(`
+        {
+          "betas": Set {},
+          "toolChoice": undefined,
+          "toolWarnings": [],
+          "tools": [
+            {
+              "allowed_domains": [
+                "https://www.google.com",
+              ],
+              "blocked_domains": undefined,
+              "cache_control": undefined,
+              "max_uses": 10,
+              "name": "web_search",
+              "type": "web_search_20250305",
+              "user_location": {
+                "city": "New York",
+                "type": "approximate",
+              },
+            },
+          ],
+        }
+      `);
+    });
+
+    it('should correctly prepare web_fetch_20250910', async () => {
+      const result = await prepareTools({
+        tools: [
+          {
+            type: 'provider',
+            id: 'anthropic.web_fetch_20250910',
+            name: 'web_fetch',
+            args: {
+              maxUses: 10,
+              allowedDomains: ['https://www.google.com'],
+              citations: { enabled: true },
+              maxContentTokens: 1000,
+            },
+          },
+        ],
+        toolChoice: undefined,
+      });
+
+      expect(result).toMatchInlineSnapshot(`
+        {
+          "betas": Set {
+            "web-fetch-2025-09-10",
+          },
+          "toolChoice": undefined,
+          "toolWarnings": [],
+          "tools": [
+            {
+              "allowed_domains": [
+                "https://www.google.com",
+              ],
+              "blocked_domains": undefined,
+              "cache_control": undefined,
+              "citations": {
+                "enabled": true,
+              },
+              "max_content_tokens": 1000,
+              "max_uses": 10,
+              "name": "web_fetch",
+              "type": "web_fetch_20250910",
+            },
+          ],
+        }
+      `);
+    });
   });
 
-  it('should add warnings for unsupported tools', () => {
-    const result = prepareTools({
+  it('should add warnings for unsupported tools', async () => {
+    const result = await prepareTools({
       tools: [
         {
-          type: 'provider-defined',
+          type: 'provider',
           id: 'unsupported.tool',
           name: 'unsupported_tool',
           args: {},
         },
       ],
+      toolChoice: undefined,
     });
     expect(result.tools).toEqual([]);
     expect(result.toolChoice).toBeUndefined();
     expect(result.toolWarnings).toMatchInlineSnapshot(`
-    [
-      {
-        "tool": {
-          "args": {},
-          "id": "unsupported.tool",
-          "name": "unsupported_tool",
-          "type": "provider-defined",
+      [
+        {
+          "feature": "provider-defined tool unsupported.tool",
+          "type": "unsupported",
         },
-        "type": "unsupported-tool",
-      },
-    ]
-  `);
+      ]
+    `);
   });
 
-  it('should handle tool choice "auto"', () => {
-    const result = prepareTools({
+  it('should handle tool choice "auto"', async () => {
+    const result = await prepareTools({
       tools: [
         {
           type: 'function',
@@ -131,8 +337,8 @@ describe('prepareTools', () => {
     expect(result.toolChoice).toEqual({ type: 'auto' });
   });
 
-  it('should handle tool choice "required"', () => {
-    const result = prepareTools({
+  it('should handle tool choice "required"', async () => {
+    const result = await prepareTools({
       tools: [
         {
           type: 'function',
@@ -146,8 +352,8 @@ describe('prepareTools', () => {
     expect(result.toolChoice).toEqual({ type: 'any' });
   });
 
-  it('should handle tool choice "none"', () => {
-    const result = prepareTools({
+  it('should handle tool choice "none"', async () => {
+    const result = await prepareTools({
       tools: [
         {
           type: 'function',
@@ -162,8 +368,8 @@ describe('prepareTools', () => {
     expect(result.toolChoice).toBeUndefined();
   });
 
-  it('should handle tool choice "tool"', () => {
-    const result = prepareTools({
+  it('should handle tool choice "tool"', async () => {
+    const result = await prepareTools({
       tools: [
         {
           type: 'function',
@@ -177,8 +383,8 @@ describe('prepareTools', () => {
     expect(result.toolChoice).toEqual({ type: 'tool', name: 'testFunction' });
   });
 
-  it('should set cache control', () => {
-    const result = prepareTools({
+  it('should set cache control', async () => {
+    const result = await prepareTools({
       tools: [
         {
           type: 'function',
@@ -192,6 +398,7 @@ describe('prepareTools', () => {
           },
         },
       ],
+      toolChoice: undefined,
     });
 
     expect(result.tools).toMatchInlineSnapshot(`
@@ -203,6 +410,88 @@ describe('prepareTools', () => {
           "description": "Test",
           "input_schema": {},
           "name": "testFunction",
+        },
+      ]
+    `);
+  });
+
+  it('should limit cache breakpoints to 4', async () => {
+    const cacheControlValidator = new CacheControlValidator();
+    const result = await prepareTools({
+      tools: [
+        {
+          type: 'function',
+          name: 'tool1',
+          description: 'Test 1',
+          inputSchema: {},
+          providerOptions: {
+            anthropic: { cacheControl: { type: 'ephemeral' } },
+          },
+        },
+        {
+          type: 'function',
+          name: 'tool2',
+          description: 'Test 2',
+          inputSchema: {},
+          providerOptions: {
+            anthropic: { cacheControl: { type: 'ephemeral' } },
+          },
+        },
+        {
+          type: 'function',
+          name: 'tool3',
+          description: 'Test 3',
+          inputSchema: {},
+          providerOptions: {
+            anthropic: { cacheControl: { type: 'ephemeral' } },
+          },
+        },
+        {
+          type: 'function',
+          name: 'tool4',
+          description: 'Test 4',
+          inputSchema: {},
+          providerOptions: {
+            anthropic: { cacheControl: { type: 'ephemeral' } },
+          },
+        },
+        {
+          type: 'function',
+          name: 'tool5',
+          description: 'Test 5 (should be rejected)',
+          inputSchema: {},
+          providerOptions: {
+            anthropic: { cacheControl: { type: 'ephemeral' } },
+          },
+        },
+      ],
+      toolChoice: undefined,
+      cacheControlValidator,
+    });
+
+    // First 4 should have cache_control
+    expect(result.tools?.[0]).toHaveProperty('cache_control', {
+      type: 'ephemeral',
+    });
+    expect(result.tools?.[1]).toHaveProperty('cache_control', {
+      type: 'ephemeral',
+    });
+    expect(result.tools?.[2]).toHaveProperty('cache_control', {
+      type: 'ephemeral',
+    });
+    expect(result.tools?.[3]).toHaveProperty('cache_control', {
+      type: 'ephemeral',
+    });
+
+    // 5th should be rejected (cache_control should be undefined)
+    expect(result.tools?.[4]).toHaveProperty('cache_control', undefined);
+
+    expect(cacheControlValidator.getWarnings()).toMatchInlineSnapshot(`
+      [
+        {
+          "details": "Maximum 4 cache breakpoints exceeded (found 5). This breakpoint will be ignored.",
+          "feature": "cacheControl breakpoint limit",
+          "type": "unsupported",
         },
       ]
     `);

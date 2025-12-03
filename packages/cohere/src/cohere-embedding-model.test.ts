@@ -1,7 +1,11 @@
-import { EmbeddingModelV2Embedding } from '@ai-sdk/provider';
-import { createTestServer } from '@ai-sdk/provider-utils/test';
+import { EmbeddingModelV3Embedding } from '@ai-sdk/provider';
+import { createTestServer } from '@ai-sdk/test-server/with-vitest';
 import { createCohere } from './cohere-provider';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('./version', () => ({
+  VERSION: '0.0.0-test',
+}));
 
 const dummyEmbeddings = [
   [0.1, 0.2, 0.3, 0.4, 0.5],
@@ -10,7 +14,7 @@ const dummyEmbeddings = [
 const testValues = ['sunny day at the beach', 'rainy day in the city'];
 
 const provider = createCohere({ apiKey: 'test-api-key' });
-const model = provider.textEmbeddingModel('embed-english-v3.0');
+const model = provider.embeddingModel('embed-english-v3.0');
 
 const server = createTestServer({
   'https://api.cohere.com/v2/embed': {},
@@ -22,7 +26,7 @@ describe('doEmbed', () => {
     meta = { billed_units: { input_tokens: 8 } },
     headers,
   }: {
-    embeddings?: EmbeddingModelV2Embedding[];
+    embeddings?: EmbeddingModelV3Embedding[];
     meta?: { billed_units: { input_tokens: number } };
     headers?: Record<string, string>;
   } = {}) {
@@ -90,7 +94,7 @@ describe('doEmbed', () => {
   it('should pass the input_type setting', async () => {
     prepareJsonResponse();
 
-    await provider.textEmbeddingModel('embed-english-v3.0').doEmbed({
+    await provider.embeddingModel('embed-english-v3.0').doEmbed({
       values: testValues,
       providerOptions: {
         cohere: {
@@ -117,7 +121,7 @@ describe('doEmbed', () => {
       },
     });
 
-    await provider.textEmbeddingModel('embed-english-v3.0').doEmbed({
+    await provider.embeddingModel('embed-english-v3.0').doEmbed({
       values: testValues,
       headers: {
         'Custom-Request-Header': 'request-header-value',
@@ -132,5 +136,8 @@ describe('doEmbed', () => {
       'custom-provider-header': 'provider-header-value',
       'custom-request-header': 'request-header-value',
     });
+    expect(server.calls[0].requestUserAgent).toContain(
+      `ai-sdk/cohere/0.0.0-test`,
+    );
   });
 });

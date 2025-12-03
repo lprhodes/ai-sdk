@@ -1,8 +1,8 @@
 import {
-  LanguageModelV2,
-  EmbeddingModelV2,
-  ProviderV2,
-  ImageModelV2,
+  LanguageModelV3,
+  EmbeddingModelV3,
+  ProviderV3,
+  ImageModelV3,
 } from '@ai-sdk/provider';
 import {
   OpenAICompatibleChatLanguageModel,
@@ -13,12 +13,14 @@ import {
   FetchFunction,
   loadApiKey,
   withoutTrailingSlash,
+  withUserAgentSuffix,
 } from '@ai-sdk/provider-utils';
 import { DeepInfraChatModelId } from './deepinfra-chat-options';
 import { DeepInfraEmbeddingModelId } from './deepinfra-embedding-options';
 import { DeepInfraCompletionModelId } from './deepinfra-completion-options';
 import { DeepInfraImageModelId } from './deepinfra-image-settings';
 import { DeepInfraImageModel } from './deepinfra-image-model';
+import { VERSION } from './version';
 
 export interface DeepInfraProviderSettings {
   /**
@@ -40,43 +42,41 @@ or to provide a custom fetch implementation for e.g. testing.
   fetch?: FetchFunction;
 }
 
-export interface DeepInfraProvider extends ProviderV2 {
+export interface DeepInfraProvider extends ProviderV3 {
   /**
 Creates a model for text generation.
 */
-  (modelId: DeepInfraChatModelId): LanguageModelV2;
+  (modelId: DeepInfraChatModelId): LanguageModelV3;
 
   /**
 Creates a chat model for text generation.
 */
-  chatModel(modelId: DeepInfraChatModelId): LanguageModelV2;
+  chatModel(modelId: DeepInfraChatModelId): LanguageModelV3;
 
   /**
 Creates a model for image generation.
   */
-  image(modelId: DeepInfraImageModelId): ImageModelV2;
+  image(modelId: DeepInfraImageModelId): ImageModelV3;
 
   /**
 Creates a model for image generation.
   */
-  imageModel(modelId: DeepInfraImageModelId): ImageModelV2;
+  imageModel(modelId: DeepInfraImageModelId): ImageModelV3;
 
   /**
 Creates a chat model for text generation.
 */
-  languageModel(modelId: DeepInfraChatModelId): LanguageModelV2;
+  languageModel(modelId: DeepInfraChatModelId): LanguageModelV3;
 
   /**
 Creates a completion model for text generation.
 */
-  completionModel(modelId: DeepInfraCompletionModelId): LanguageModelV2;
+  completionModel(modelId: DeepInfraCompletionModelId): LanguageModelV3;
 
   /**
-Creates a text embedding model for text generation.
+Creates a embedding model for text generation.
 */
-  textEmbeddingModel(
-    modelId: DeepInfraEmbeddingModelId,
-  ): EmbeddingModelV2<string>;
+  embeddingModel(modelId: DeepInfraEmbeddingModelId): EmbeddingModelV3;
 }
 
 export function createDeepInfra(
@@ -85,14 +85,18 @@ export function createDeepInfra(
   const baseURL = withoutTrailingSlash(
     options.baseURL ?? 'https://api.deepinfra.com/v1',
   );
-  const getHeaders = () => ({
-    Authorization: `Bearer ${loadApiKey({
-      apiKey: options.apiKey,
-      environmentVariableName: 'DEEPINFRA_API_KEY',
-      description: "DeepInfra's API key",
-    })}`,
-    ...options.headers,
-  });
+  const getHeaders = () =>
+    withUserAgentSuffix(
+      {
+        Authorization: `Bearer ${loadApiKey({
+          apiKey: options.apiKey,
+          environmentVariableName: 'DEEPINFRA_API_KEY',
+          description: "DeepInfra's API key",
+        })}`,
+        ...options.headers,
+      },
+      `ai-sdk/deepinfra/${VERSION}`,
+    );
 
   interface CommonModelConfig {
     provider: string;
@@ -121,7 +125,7 @@ export function createDeepInfra(
       getCommonModelConfig('completion'),
     );
 
-  const createTextEmbeddingModel = (modelId: DeepInfraEmbeddingModelId) =>
+  const createEmbeddingModel = (modelId: DeepInfraEmbeddingModelId) =>
     new OpenAICompatibleEmbeddingModel(
       modelId,
       getCommonModelConfig('embedding'),
@@ -137,12 +141,13 @@ export function createDeepInfra(
 
   const provider = (modelId: DeepInfraChatModelId) => createChatModel(modelId);
 
+  provider.specificationVersion = 'v3' as const;
   provider.completionModel = createCompletionModel;
   provider.chatModel = createChatModel;
   provider.image = createImageModel;
   provider.imageModel = createImageModel;
   provider.languageModel = createChatModel;
-  provider.textEmbeddingModel = createTextEmbeddingModel;
+  provider.embeddingModel = createEmbeddingModel;
 
   return provider;
 }

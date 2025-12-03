@@ -1,37 +1,36 @@
 import {
-  LanguageModelV2CallOptions,
-  LanguageModelV2CallWarning,
+  LanguageModelV3CallOptions,
+  SharedV3Warning,
   UnsupportedFunctionalityError,
 } from '@ai-sdk/provider';
-import { fileSearchArgsSchema } from '../tool/file-search';
-import { webSearchPreviewArgsSchema } from '../tool/web-search-preview';
-import { OpenAIChatToolChoice, OpenAIChatTools } from './openai-chat-types';
+import {
+  OpenAIChatToolChoice,
+  OpenAIChatFunctionTool,
+} from './openai-chat-api';
 
 export function prepareChatTools({
   tools,
   toolChoice,
-  structuredOutputs,
   strictJsonSchema,
 }: {
-  tools: LanguageModelV2CallOptions['tools'];
-  toolChoice?: LanguageModelV2CallOptions['toolChoice'];
-  structuredOutputs: boolean;
+  tools: LanguageModelV3CallOptions['tools'];
+  toolChoice?: LanguageModelV3CallOptions['toolChoice'];
   strictJsonSchema: boolean;
 }): {
-  tools?: OpenAIChatTools;
+  tools?: OpenAIChatFunctionTool[];
   toolChoice?: OpenAIChatToolChoice;
-  toolWarnings: Array<LanguageModelV2CallWarning>;
+  toolWarnings: Array<SharedV3Warning>;
 } {
   // when the tools array is empty, change it to undefined to prevent errors:
   tools = tools?.length ? tools : undefined;
 
-  const toolWarnings: LanguageModelV2CallWarning[] = [];
+  const toolWarnings: SharedV3Warning[] = [];
 
   if (tools == null) {
     return { tools: undefined, toolChoice: undefined, toolWarnings };
   }
 
-  const openaiTools: OpenAIChatTools = [];
+  const openaiTools: OpenAIChatFunctionTool[] = [];
 
   for (const tool of tools) {
     switch (tool.type) {
@@ -42,41 +41,15 @@ export function prepareChatTools({
             name: tool.name,
             description: tool.description,
             parameters: tool.inputSchema,
-            strict: structuredOutputs ? strictJsonSchema : undefined,
+            strict: strictJsonSchema,
           },
         });
         break;
-      case 'provider-defined':
-        switch (tool.id) {
-          case 'openai.file_search': {
-            const args = fileSearchArgsSchema.parse(tool.args);
-            openaiTools.push({
-              type: 'file_search',
-              vector_store_ids: args.vectorStoreIds,
-              max_num_results: args.maxNumResults,
-              ranking_options: args.ranking
-                ? { ranker: args.ranking.ranker }
-                : undefined,
-              filters: args.filters,
-            });
-            break;
-          }
-          case 'openai.web_search_preview': {
-            const args = webSearchPreviewArgsSchema.parse(tool.args);
-            openaiTools.push({
-              type: 'web_search_preview',
-              search_context_size: args.searchContextSize,
-              user_location: args.userLocation,
-            });
-            break;
-          }
-          default:
-            toolWarnings.push({ type: 'unsupported-tool', tool });
-            break;
-        }
-        break;
       default:
-        toolWarnings.push({ type: 'unsupported-tool', tool });
+        toolWarnings.push({
+          type: 'unsupported',
+          feature: `tool type: ${tool.type}`,
+        });
         break;
     }
   }

@@ -1,4 +1,4 @@
-import { ImageModelV2, ImageModelV2CallWarning } from '@ai-sdk/provider';
+import { ImageModelV3, SharedV3Warning } from '@ai-sdk/provider';
 import {
   Resolvable,
   combineHeaders,
@@ -22,8 +22,8 @@ interface GoogleVertexImageModelConfig {
 }
 
 // https://cloud.google.com/vertex-ai/generative-ai/docs/image/generate-images
-export class GoogleVertexImageModel implements ImageModelV2 {
-  readonly specificationVersion = 'v2';
+export class GoogleVertexImageModel implements ImageModelV3 {
+  readonly specificationVersion = 'v3';
   // https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/imagen-api#parameter_list
   readonly maxImagesPerCall = 4;
 
@@ -45,15 +45,15 @@ export class GoogleVertexImageModel implements ImageModelV2 {
     providerOptions,
     headers,
     abortSignal,
-  }: Parameters<ImageModelV2['doGenerate']>[0]): Promise<
-    Awaited<ReturnType<ImageModelV2['doGenerate']>>
+  }: Parameters<ImageModelV3['doGenerate']>[0]): Promise<
+    Awaited<ReturnType<ImageModelV3['doGenerate']>>
   > {
-    const warnings: Array<ImageModelV2CallWarning> = [];
+    const warnings: Array<SharedV3Warning> = [];
 
     if (size != null) {
       warnings.push({
-        type: 'unsupported-setting',
-        setting: 'size',
+        type: 'unsupported',
+        feature: 'size',
         details:
           'This model does not support the `size` option. Use `aspectRatio` instead.',
       });
@@ -145,6 +145,7 @@ const vertexImageProviderOptionsSchema = z.object({
     .nullish(),
   addWatermark: z.boolean().nullish(),
   storageUri: z.string().nullish(),
+  sampleImageSize: z.enum(['1K', '2K']).nullish(),
 });
 export type GoogleVertexImageProviderOptions = z.infer<
   typeof vertexImageProviderOptionsSchema

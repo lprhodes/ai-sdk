@@ -1,4 +1,4 @@
-import { createTestServer } from '@ai-sdk/provider-utils/test';
+import { createTestServer } from '@ai-sdk/test-server/with-vitest';
 import { createAmazonBedrock } from './bedrock-provider';
 import { BedrockImageModel } from './bedrock-image-model';
 import { injectFetchHeaders } from './inject-fetch-headers';
@@ -128,14 +128,15 @@ describe('doGenerate', () => {
       providerOptions: {},
     });
 
-    expect(result.warnings).toStrictEqual([
-      {
-        type: 'unsupported-setting',
-        setting: 'aspectRatio',
-        details:
-          'This model does not support aspect ratio. Use `size` instead.',
-      },
-    ]);
+    expect(result.warnings).toMatchInlineSnapshot(`
+      [
+        {
+          "details": "This model does not support aspect ratio. Use \`size\` instead.",
+          "feature": "aspectRatio",
+          "type": "unsupported",
+        },
+      ]
+    `);
   });
 
   it('should extract the generated images', async () => {

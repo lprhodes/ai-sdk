@@ -1,6 +1,6 @@
 import {
-  ImageModelV2,
-  ImageModelV2CallWarning,
+  ImageModelV3,
+  SharedV3Warning,
   InvalidResponseDataError,
 } from '@ai-sdk/provider';
 import {
@@ -30,8 +30,8 @@ interface LumaImageModelConfig {
   };
 }
 
-export class LumaImageModel implements ImageModelV2 {
-  readonly specificationVersion = 'v2';
+export class LumaImageModel implements ImageModelV3 {
+  readonly specificationVersion = 'v3';
   readonly maxImagesPerCall = 1;
   readonly pollIntervalMillis = DEFAULT_POLL_INTERVAL_MILLIS;
   readonly maxPollAttempts = DEFAULT_MAX_POLL_ATTEMPTS;
@@ -54,23 +54,23 @@ export class LumaImageModel implements ImageModelV2 {
     providerOptions,
     headers,
     abortSignal,
-  }: Parameters<ImageModelV2['doGenerate']>[0]): Promise<
-    Awaited<ReturnType<ImageModelV2['doGenerate']>>
+  }: Parameters<ImageModelV3['doGenerate']>[0]): Promise<
+    Awaited<ReturnType<ImageModelV3['doGenerate']>>
   > {
-    const warnings: Array<ImageModelV2CallWarning> = [];
+    const warnings: Array<SharedV3Warning> = [];
 
     if (seed != null) {
       warnings.push({
-        type: 'unsupported-setting',
-        setting: 'seed',
+        type: 'unsupported',
+        feature: 'seed',
         details: 'This model does not support the `seed` option.',
       });
     }
 
     if (size != null) {
       warnings.push({
-        type: 'unsupported-setting',
-        setting: 'size',
+        type: 'unsupported',
+        feature: 'size',
         details:
           'This model does not support the `size` option. Use `aspectRatio` instead.',
       });

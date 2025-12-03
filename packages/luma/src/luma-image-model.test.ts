@@ -1,5 +1,5 @@
 import { FetchFunction } from '@ai-sdk/provider-utils';
-import { createTestServer } from '@ai-sdk/provider-utils/test';
+import { createTestServer } from '@ai-sdk/test-server/with-vitest';
 import { describe, expect, it } from 'vitest';
 import { LumaImageModel } from './luma-image-model';
 import { InvalidResponseDataError } from '@ai-sdk/provider';
@@ -248,18 +248,20 @@ describe('LumaImageModel', () => {
           aspectRatio: undefined,
         });
 
-        expect(result.warnings).toContainEqual({
-          type: 'unsupported-setting',
-          setting: 'seed',
-          details: 'This model does not support the `seed` option.',
-        });
-
-        expect(result.warnings).toContainEqual({
-          type: 'unsupported-setting',
-          setting: 'size',
-          details:
-            'This model does not support the `size` option. Use `aspectRatio` instead.',
-        });
+        expect(result.warnings).toMatchInlineSnapshot(`
+          [
+            {
+              "details": "This model does not support the \`seed\` option.",
+              "feature": "seed",
+              "type": "unsupported",
+            },
+            {
+              "details": "This model does not support the \`size\` option. Use \`aspectRatio\` instead.",
+              "feature": "size",
+              "type": "unsupported",
+            },
+          ]
+        `);
       });
     });
 
@@ -294,7 +296,7 @@ describe('LumaImageModel', () => {
 
       expect(model.provider).toBe('luma');
       expect(model.modelId).toBe('test-model');
-      expect(model.specificationVersion).toBe('v2');
+      expect(model.specificationVersion).toBe('v3');
       expect(model.maxImagesPerCall).toBe(1);
     });
   });

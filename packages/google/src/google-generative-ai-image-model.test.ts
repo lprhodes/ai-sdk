@@ -1,4 +1,4 @@
-import { createTestServer } from '@ai-sdk/provider-utils/test';
+import { createTestServer } from '@ai-sdk/test-server/with-vitest';
 import { GoogleGenerativeAIImageModel } from './google-generative-ai-image-model';
 import { describe, it, expect } from 'vitest';
 
@@ -205,20 +205,20 @@ describe('GoogleGenerativeAIImageModel', () => {
         providerOptions: {},
       });
 
-      expect(result.warnings).toStrictEqual([
-        {
-          type: 'unsupported-setting',
-          setting: 'size',
-          details:
-            'This model does not support the `size` option. Use `aspectRatio` instead.',
-        },
-        {
-          type: 'unsupported-setting',
-          setting: 'seed',
-          details:
-            'This model does not support the `seed` option through this provider.',
-        },
-      ]);
+      expect(result.warnings).toMatchInlineSnapshot(`
+        [
+          {
+            "details": "This model does not support the \`size\` option. Use \`aspectRatio\` instead.",
+            "feature": "size",
+            "type": "unsupported",
+          },
+          {
+            "details": "This model does not support the \`seed\` option through this provider.",
+            "feature": "seed",
+            "type": "unsupported",
+          },
+        ]
+      `);
     });
 
     it('should include response data with timestamp, modelId and headers', async () => {
